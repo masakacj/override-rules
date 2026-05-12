@@ -12,7 +12,6 @@ export const PROXY_GROUPS = {
     DIRECT: "直连",
     LANDING: "落地节点",
     LOW_COST: "低倍率节点",
-    SUCAI: "sucai",
     FRONT_PROXY: "前置代理",
     STATIC_RESOURCES: "静态资源",
     AI_SERVICE: "AI服务",
@@ -45,10 +44,6 @@ export const LOW_COST_NODE_MATCHER = createCaseInsensitiveNodeMatcher(
 export const LANDING_NODE_MATCHER = createCaseInsensitiveNodeMatcher(
     String.raw`家宽|家庭宽带|商宽|商业宽带|星链|Starlink|落地`
 );
-
-export const SUCAI_NODE_PATTERN = String.raw`sucai`;
-
-export const SUCAI_NODE_MATCHER = createCaseInsensitiveNodeMatcher(SUCAI_NODE_PATTERN);
 
 /**
  * 各地区的元数据：`weight` 决定在代理组列表中的排列顺序（值越小越靠前，未设置则排末尾）；
