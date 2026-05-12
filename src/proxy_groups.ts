@@ -27,10 +27,6 @@ function withoutSucaiNodes(nodes: string[]): string[] {
     return nodes.filter((nodeName) => !isSucaiNode(nodeName));
 }
 
-function uniqueNodes(nodes: string[]): string[] {
-    return Array.from(new Set(nodes));
-}
-
 function combineExcludeFilters(...filters: Array<string | undefined>): string | undefined {
     const validFilters = filters.filter(Boolean) as string[];
     return validFilters.length > 0 ? validFilters.join("|") : undefined;
@@ -112,18 +108,6 @@ export function buildProxyGroups({
     const hasHK = countries.includes("香港");
     const hasUS = countries.includes("美国");
 
-    const sucaiNodes = uniqueNodes(
-        [
-            ...defaultFallback,
-            ...defaultSelector,
-            ...defaultProxies,
-            ...defaultProxiesDirect,
-            ...frontProxySelector,
-            ...landingNodes,
-            ...lowCostNodes,
-        ].filter(isSucaiNode)
-    );
-
     const defaultSelectorWithoutSucai = withoutSucaiNodes(defaultSelector);
     const defaultProxiesWithoutSucai = withoutSucaiNodes(defaultProxies);
     const defaultProxiesDirectWithoutSucai = withoutSucaiNodes(defaultProxiesDirect);
@@ -146,16 +130,13 @@ export function buildProxyGroups({
             "exclude-filter": SUCAI_NODE_MATCHER.pattern,
             type: "select",
         },
-        regexFilter || sucaiNodes.length > 0
-            ? {
-                  name: PROXY_GROUPS.SUCAI,
-                  icon: `${CDN_URL}/gh/Koolson/Qure@master/IconSet/Color/Star.png`,
-                  type: "select",
-                  ...(regexFilter
-                      ? { "include-all": true, filter: SUCAI_NODE_MATCHER.pattern }
-                      : { proxies: sucaiNodes }),
-              }
-            : null,
+        {
+            name: PROXY_GROUPS.SUCAI,
+            icon: `${CDN_URL}/gh/Koolson/Qure@master/IconSet/Color/Star.png`,
+            type: "select",
+            "include-all": true,
+            filter: SUCAI_NODE_MATCHER.pattern,
+        },
         landing
             ? {
                   name: PROXY_GROUPS.FRONT_PROXY,
