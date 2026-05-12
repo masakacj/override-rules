@@ -112,7 +112,10 @@ function main(config: ClashConfig): ClashConfig {
         frontProxySelector,
     });
 
-    const globalProxies = proxyGroups.map((item) => String(item.name));
+    const globalProxies = proxyGroups
+        .map((item) => String(item.name))
+        .filter((name) => name !== PROXY_GROUPS.SUCAI);
+    
     proxyGroups.push({
         name: PROXY_GROUPS.GLOBAL,
         icon: `${CDN_URL}/gh/Koolson/Qure@master/IconSet/Color/Global.png`,
