@@ -10,9 +10,9 @@ import {
 import type {
     BuildCountryProxyGroupsInput,
     BuildProxyGroupsInput,
+    CountryInfoItem,
     ProxyGroup,
 } from "./types";
-
 
 function isAutoScNode(nodeName: string): boolean {
     return AUTO_SC_GROUP_REGEXP.test(nodeName);
@@ -32,25 +32,23 @@ function combineExcludeFilters(...filters: Array<string | undefined>): string | 
     return validFilters.length > 0 ? validFilters.join("|") : undefined;
 }
 
-function buildAutoScProxyGroups(countryInfo: CountryInfoItem[]): {
+function buildAutoScProxyGroups(allProxyNames: string[]): {
     groups: ProxyGroup[];
     autoScNodeSet: Set<string>;
 } {
     const groupMap = new Map<string, string[]>();
     const autoScNodeSet = new Set<string>();
 
-    for (const item of countryInfo) {
-        for (const nodeName of item.nodes) {
-            const groupName = extractAutoScGroupName(nodeName);
-            if (!groupName) continue;
+    for (const nodeName of allProxyNames) {
+        const groupName = extractAutoScGroupName(nodeName);
+        if (!groupName) continue;
 
-            autoScNodeSet.add(nodeName);
+        autoScNodeSet.add(nodeName);
 
-            if (!groupMap.has(groupName)) {
-                groupMap.set(groupName, []);
-            }
-            groupMap.get(groupName)!.push(nodeName);
+        if (!groupMap.has(groupName)) {
+            groupMap.set(groupName, []);
         }
+        groupMap.get(groupName)!.push(nodeName);
     }
 
     const groups: ProxyGroup[] = Array.from(groupMap.entries()).map(([groupName, nodeNames]) => ({
@@ -136,18 +134,21 @@ export function buildProxyGroups({
     defaultSelector,
     defaultFallback,
     frontProxySelector,
-    countryInfo,
-}: BuildProxyGroupsInput & { countryInfo: CountryInfoItem[] }): ProxyGroup[] {
+    allProxyNames,
+}: BuildProxyGroupsInput): ProxyGroup[] {
     const hasTW = countries.includes("台湾");
     const hasHK = countries.includes("香港");
     const hasUS = countries.includes("美国");
 
     // 先自动扫描 sc.<group>. 节点，生成独立 group
-    const { groups: autoScGroups, autoScNodeSet } = buildAutoScProxyGroups(countryInfo);
+    const { groups: autoScGroups, autoScNodeSet } = buildAutoScProxyGroups(allProxyNames);
 
     const defaultSelectorWithoutAutoSc = withoutAutoScNodes(defaultSelector, autoScNodeSet);
     const defaultProxiesWithoutAutoSc = withoutAutoScNodes(defaultProxies, autoScNodeSet);
-    const defaultProxiesDirectWithoutAutoSc = withoutAutoScNodes(defaultProxiesDirect, autoScNodeSet);
+    const defaultProxiesDirectWithoutAutoSc = withoutAutoScNodes(
+        defaultProxiesDirect,
+        autoScNodeSet
+    );
     const defaultFallbackWithoutAutoSc = withoutAutoScNodes(defaultFallback, autoScNodeSet);
     const frontProxySelectorWithoutAutoSc = withoutAutoScNodes(frontProxySelector, autoScNodeSet);
     const landingNodesWithoutAutoSc = withoutAutoScNodes(landingNodes, autoScNodeSet);

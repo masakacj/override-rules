@@ -77,4 +77,5 @@ export interface BuildProxyGroupsInput {
     defaultSelector: string[];
     defaultFallback: string[];
     frontProxySelector: string[];
+    allProxyNames: string[];
 }
