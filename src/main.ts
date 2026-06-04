@@ -65,7 +65,9 @@ const {
 
 function main(config: ClashConfig): ClashConfig {
     const resultConfig: ClashConfig = { proxies: config.proxies };
-
+    const allProxyNames = (config.proxies ?? [])
+        .map((proxy) => String(proxy.name ?? ""))
+        .filter(Boolean);
     const countryInfo = parseCountries(resultConfig, landing);
     const lowCostNodes = parseLowCost(resultConfig);
     const countryGroupNames = getCountryGroupNames(countryInfo, countryThreshold);
@@ -109,7 +111,9 @@ function main(config: ClashConfig): ClashConfig {
         defaultSelector,
         defaultFallback,
         frontProxySelector,
+        allProxyNames,
     });
+
 
     const globalProxies = proxyGroups.map((item) => String(item.name));
 
