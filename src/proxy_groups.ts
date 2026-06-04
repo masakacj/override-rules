@@ -1,4 +1,5 @@
 import {
+    AUTO_SC_GROUP_REGEXP,
     CDN_URL,
     LANDING_NODE_MATCHER,
     LOW_COST_NODE_MATCHER,
@@ -9,12 +10,9 @@ import {
 import type {
     BuildCountryProxyGroupsInput,
     BuildProxyGroupsInput,
-    CountryInfoItem,
     ProxyGroup,
 } from "./types";
 
-// 匹配 sc.<groupName>.xxx
-const AUTO_SC_GROUP_REGEXP = /^sc\.([^.]+)\./i;
 
 function isAutoScNode(nodeName: string): boolean {
     return AUTO_SC_GROUP_REGEXP.test(nodeName);
@@ -22,7 +20,7 @@ function isAutoScNode(nodeName: string): boolean {
 
 function extractAutoScGroupName(nodeName: string): string | null {
     const match = nodeName.match(AUTO_SC_GROUP_REGEXP);
-    return match ? match[1].toLowerCase() : null;
+    return match?.[1]?.trim() || null;
 }
 
 function withoutAutoScNodes(nodes: string[], autoScNodeSet: Set<string>): string[] {
