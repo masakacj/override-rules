@@ -19,17 +19,64 @@ import type {
 // 这是给 Clash/Mihomo filter 使用的，不能直接传给 JavaScript RegExp。
 const SUCAI_NODE_REGEXP = new RegExp(SUCAI_NODE_PATTERN, "i");
 
+// 匹配 sc.<groupName>.xxx
+const AUTO_SC_GROUP_REGEXP = /^sc\.([^.]+)\./i;
+
 function isSucaiNode(nodeName: string): boolean {
     return SUCAI_NODE_REGEXP.test(nodeName);
+}
+
+function isAutoScNode(nodeName: string): boolean {
+    return AUTO_SC_GROUP_REGEXP.test(nodeName);
+}
+
+function extractAutoScGroupName(nodeName: string): string | null {
+    const match = nodeName.match(AUTO_SC_GROUP_REGEXP);
+    return match ? match[1].toLowerCase() : null;
 }
 
 function withoutSucaiNodes(nodes: string[]): string[] {
     return nodes.filter((nodeName) => !isSucaiNode(nodeName));
 }
 
+function withoutAutoScNodes(nodes: string[]): string[] {
+    return nodes.filter((nodeName) => !isAutoScNode(nodeName));
+}
+
 function combineExcludeFilters(...filters: Array<string | undefined>): string | undefined {
     const validFilters = filters.filter(Boolean) as string[];
     return validFilters.length > 0 ? validFilters.join("|") : undefined;
+}
+
+function buildAutoScProxyGroups(countryInfo: CountryInfoItem[]): {
+    groups: ProxyGroup[];
+    autoScNodeSet: Set<string>;
+} {
+    const groupMap = new Map<string, string[]>();
+    const autoScNodeSet = new Set<string>();
+
+    for (const item of countryInfo) {
+        for (const nodeName of item.nodes) {
+            const groupName = extractAutoScGroupName(nodeName);
+            if (!groupName) continue;
+
+            autoScNodeSet.add(nodeName);
+
+            if (!groupMap.has(groupName)) {
+                groupMap.set(groupName, []);
+            }
+            groupMap.get(groupName)!.push(nodeName);
+        }
+    }
+
+    const groups: ProxyGroup[] = Array.from(groupMap.entries()).map(([groupName, nodeNames]) => ({
+        name: groupName,
+        icon: `${CDN_URL}/gh/Koolson/Qure@master/IconSet/Color/Star.png`,
+        type: "select",
+        proxies: nodeNames,
+    }));
+
+    return { groups, autoScNodeSet };
 }
 
 /**
@@ -103,18 +150,25 @@ export function buildProxyGroups({
     defaultSelector,
     defaultFallback,
     frontProxySelector,
-}: BuildProxyGroupsInput): ProxyGroup[] {
+    countryInfo,
+}: BuildProxyGroupsInput & { countryInfo: CountryInfoItem[] }): ProxyGroup[] {
     const hasTW = countries.includes("台湾");
     const hasHK = countries.includes("香港");
     const hasUS = countries.includes("美国");
 
-    const defaultSelectorWithoutSucai = withoutSucaiNodes(defaultSelector);
-    const defaultProxiesWithoutSucai = withoutSucaiNodes(defaultProxies);
-    const defaultProxiesDirectWithoutSucai = withoutSucaiNodes(defaultProxiesDirect);
-    const defaultFallbackWithoutSucai = withoutSucaiNodes(defaultFallback);
-    const frontProxySelectorWithoutSucai = withoutSucaiNodes(frontProxySelector);
-    const landingNodesWithoutSucai = withoutSucaiNodes(landingNodes);
-    const lowCostNodesWithoutSucai = withoutSucaiNodes(lowCostNodes);
+    // 先自动扫描 sc.<group>. 节点，生成独立 group
+    const { groups: autoScGroups, autoScNodeSet } = buildAutoScProxyGroups(countryInfo);
+
+    // 用于从普通组中排除自动特殊节点
+    const withoutAutoSc = (nodes: string[]) => nodes.filter((nodeName) => !autoScNodeSet.has(nodeName));
+
+    const defaultSelectorWithoutSucai = withoutAutoSc(withoutSucaiNodes(defaultSelector));
+    const defaultProxiesWithoutSucai = withoutAutoSc(withoutSucaiNodes(defaultProxies));
+    const defaultProxiesDirectWithoutSucai = withoutAutoSc(withoutSucaiNodes(defaultProxiesDirect));
+    const defaultFallbackWithoutSucai = withoutAutoSc(withoutSucaiNodes(defaultFallback));
+    const frontProxySelectorWithoutSucai = withoutAutoSc(withoutSucaiNodes(frontProxySelector));
+    const landingNodesWithoutSucai = withoutAutoSc(withoutSucaiNodes(landingNodes));
+    const lowCostNodesWithoutSucai = withoutAutoSc(withoutSucaiNodes(lowCostNodes));
 
     const groups: Array<ProxyGroup | null> = [
         {
@@ -342,6 +396,8 @@ export function buildProxyGroups({
                         }),
               }
             : null,
+        // 自动生成的 sc.<group>. 节点组插在最后
+        ...autoScGroups,
         ...countryProxyGroups,
     ];
 
