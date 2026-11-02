@@ -303,4 +303,44 @@ function main(config) {
     };
 }
 
+// Sub-Store has two distinct JS environments:
+// 1) Mihomo override: globalThis.main(config) -> config
+// 2) 文件 -> 脚本操作: read $content/$files and assign YAML text to $content.
+// Keep both supported because the same source may be used from either editor.
 globalThis.main = main;
+
+if (typeof $content !== 'undefined' || typeof $files !== 'undefined') {
+    if (typeof ProxyUtils === 'undefined' ||
+        !ProxyUtils.yaml ||
+        typeof ProxyUtils.yaml.safeLoad !== 'function' ||
+        typeof ProxyUtils.yaml.dump !== 'function') {
+        throw new Error('home-company: Sub-Store file script requires ProxyUtils.yaml');
+    }
+
+    const candidates = [
+        typeof $content !== 'undefined' ? $content : undefined,
+        ...(typeof $files !== 'undefined' && Array.isArray($files) ? $files : [])
+    ];
+    let sourceConfig = null;
+    for (const item of candidates) {
+        if (item === null || typeof item === 'undefined') continue;
+        let data = item;
+        if (typeof data === 'string') {
+            if (!data.trim()) continue;
+            data = ProxyUtils.yaml.safeLoad(data);
+        }
+        // Some Sub-Store file sources return the array of node definitions
+        // rather than a Mihomo mapping containing a proxies array.
+        if (Array.isArray(data)) data = { proxies: data };
+        if (data && Array.isArray(data.proxies)) {
+            sourceConfig = data;
+            break;
+        }
+    }
+    if (!sourceConfig) {
+        throw new Error('home-company: select a subscription/collection source containing sc.company.* nodes in the file editor, or add them with "从订阅添加节点" before this script');
+    }
+
+    // It is the FILE output, not the raw JavaScript, that OpenClash subscribes to.
+    $content = ProxyUtils.yaml.dump(main(sourceConfig));
+}
