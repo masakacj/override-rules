@@ -137,15 +137,15 @@ DOMAIN-SUFFIX,redditspace.com,company
 DOMAIN-SUFFIX,redditinc.com,company
 
 # Previously 选择代理: temporary company-only replacement
-DOMAIN-SUFFIX,tikhub.io,company
-DOMAIN-SUFFIX,hjd2048.com,company
-DOMAIN-SUFFIX,img9g2026.com,company
-DOMAIN-SUFFIX,maoxinquan.net,company
+DOMAIN-SUFFIX,tikhub.io,选择代理
+DOMAIN-SUFFIX,hjd2048.com,选择代理
+DOMAIN-SUFFIX,img9g2026.com,选择代理
+DOMAIN-SUFFIX,maoxinquan.net,选择代理
 DOMAIN-SUFFIX,api.qsy.ink,company
-DOMAIN-SUFFIX,todoist.com,company
-DOMAIN-SUFFIX,todoist.net,company
-DOMAIN,todoist.b-cdn.net,company
-DOMAIN-SUFFIX,parsec.app,company
+DOMAIN-SUFFIX,todoist.com,选择代理
+DOMAIN-SUFFIX,todoist.net,选择代理
+DOMAIN,todoist.b-cdn.net,选择代理
+DOMAIN-SUFFIX,parsec.app,选择代理
 DOMAIN-SUFFIX,mi.com,DIRECT
 
 # OCSP
@@ -193,7 +193,7 @@ DOMAIN-SUFFIX,aliyuncs.com,DIRECT
 GEOSITE,private,DIRECT
 GEOIP,private,DIRECT,no-resolve
 GEOSITE,cn,DIRECT
-GEOIP,CN,DIRECT
+GEOIP,CN,DIRECT,no-resolve
 
 # Emergency fallback
 MATCH,company
@@ -204,9 +204,19 @@ function main(config) {
         throw new Error('home-company: source must be an existing Sub-Store subscription/collection with a proxies array');
     }
     const input = config.proxies;
-    const matched = input.filter(p => p && typeof p.name === 'string' && (
+    const explicit = input.filter(p => p && typeof p.name === 'string' && (
         COMPANY_NAME_RE.test(p.name) || (ALLOW_EXACT_COMPANY_NAME && p.name.toLowerCase() === 'company')
     ));
+    // Existing sucai-mod configuration may use ordinary node names in a
+    // dedicated company group, rather than sc.company.* naming.
+    const physicalByName = new Map(input.filter(p => p && p.name).map(p => [p.name, p]));
+    const companyGroup = Array.isArray(config['proxy-groups'])
+        ? config['proxy-groups'].find(g => g && g.name === 'company')
+        : null;
+    const grouped = companyGroup && Array.isArray(companyGroup.proxies)
+        ? companyGroup.proxies.filter(n => physicalByName.has(n)).map(n => physicalByName.get(n))
+        : [];
+    const matched = Array.from(new Map([...explicit, ...grouped].map(p => [p.name, p])).values());
     if (!matched.length) {
         throw new Error('home-company: no sc.company.* nodes found; refusing to create a configuration that could route via airport');
     }
@@ -310,37 +320,93 @@ function main(config) {
 globalThis.main = main;
 
 if (typeof $content !== 'undefined' || typeof $files !== 'undefined') {
-    if (typeof ProxyUtils === 'undefined' ||
-        !ProxyUtils.yaml ||
+    if (typeof ProxyUtils === 'undefined' || !ProxyUtils.yaml ||
         typeof ProxyUtils.yaml.safeLoad !== 'function' ||
         typeof ProxyUtils.yaml.dump !== 'function') {
         throw new Error('home-company: Sub-Store file script requires ProxyUtils.yaml');
     }
 
+    function parseSource(value) {
+        if (value === null || typeof value === 'undefined') return null;
+        let data = value;
+        if (typeof data === 'string') {
+            if (!data.trim()) return null;
+            try { data = ProxyUtils.yaml.safeLoad(data); }
+            catch (_) { return null; }
+        }
+        if (Array.isArray(data)) return { proxies: data };
+        if (data && Array.isArray(data.proxies)) return data;
+        return null;
+    }
+    function getArgument(key) {
+        if (typeof $arguments === 'undefined' || !$arguments) return undefined;
+        if (typeof $arguments === 'object') return $arguments[key];
+        if (typeof $arguments === 'string') {
+            const part = $arguments.split('&').find(x => x.split('=')[0] === key);
+            return part ? decodeURIComponent(part.slice(key.length + 1)) : undefined;
+        }
+        return undefined;
+    }
+    function tryGenerate(value) {
+        const cfg = parseSource(value);
+        if (!cfg) return null;
+        try { return main(cfg); }
+        catch (e) {
+            // Keep trying alternative input sources only when there are no
+            // company nodes. Other errors (e.g. external airport dialer) fail closed.
+            if (String(e.message).includes('no sc.company.* nodes')) return null;
+            throw e;
+        }
+    }
+
+    // $content/$files may contain only a template (or be empty). Sub-Store
+    // does NOT automatically provide nodes to file scripts in that case.
     const candidates = [
         typeof $content !== 'undefined' ? $content : undefined,
         ...(typeof $files !== 'undefined' && Array.isArray($files) ? $files : [])
     ];
-    let sourceConfig = null;
-    for (const item of candidates) {
-        if (item === null || typeof item === 'undefined') continue;
-        let data = item;
-        if (typeof data === 'string') {
-            if (!data.trim()) continue;
-            data = ProxyUtils.yaml.safeLoad(data);
-        }
-        // Some Sub-Store file sources return the array of node definitions
-        // rather than a Mihomo mapping containing a proxies array.
-        if (Array.isArray(data)) data = { proxies: data };
-        if (data && Array.isArray(data.proxies)) {
-            sourceConfig = data;
-            break;
-        }
-    }
-    if (!sourceConfig) {
-        throw new Error('home-company: select a subscription/collection source containing sc.company.* nodes in the file editor, or add them with "从订阅添加节点" before this script');
+    let generated = null;
+    for (const value of candidates) {
+        generated = tryGenerate(value);
+        if (generated) break;
     }
 
-    // It is the FILE output, not the raw JavaScript, that OpenClash subscribes to.
-    $content = ProxyUtils.yaml.dump(main(sourceConfig));
+    // Official Sub-Store file-script API: produceArtifact.
+    // Default to the existing Mihomo file named sucai-mod. That file's
+    // generated configuration can contain the company group / sc.company nodes.
+    // Override the source using URL parameters:
+    // #sourceType=file&sourceName=sucai-mod
+    // #sourceType=collection&sourceName=YOUR_COLLECTION
+    // #sourceType=subscription&sourceName=YOUR_SUBSCRIPTION
+    const sourceType = String(getArgument('sourceType') || 'file');
+    const sourceName = String(getArgument('sourceName') || 'sucai-mod');
+    if (!generated && typeof produceArtifact === 'function') {
+        if (!['file', 'subscription', 'collection'].includes(sourceType)) {
+            throw new Error('home-company: invalid sourceType; use file, subscription or collection');
+        }
+        if (!sourceName || sourceName === 'home-company') {
+            throw new Error('home-company: sourceName cannot be empty or self-referencing');
+        }
+        try {
+            const artifact = await produceArtifact({
+                type: sourceType,
+                name: sourceName,
+                ...(sourceType !== 'file' ? {
+                    platform: 'ClashMeta',
+                    produceType: 'internal',
+                    produceOpts: { 'include-unsupported-proxy': true }
+                } : {})
+            });
+            generated = tryGenerate(artifact);
+        } catch (e) {
+            if (String(e.message).includes('external dialer-proxy')) throw e;
+            throw new Error('home-company: cannot read company nodes from '+sourceType+' "'+
+                sourceName+'". Verify the source exists and contains a company group or sc.company.* nodes. Detail: '+String(e.message));
+        }
+    }
+    if (!generated) {
+        throw new Error('home-company: no company nodes found in file contents or '+sourceType+
+            ' "'+sourceName+'". Set #sourceType=collection&sourceName=YOUR_COLLECTION to the actual node source.');
+    }
+    $content = ProxyUtils.yaml.dump(generated);
 }
