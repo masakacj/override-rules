@@ -18,7 +18,7 @@ const BLOCK_QUIC = true;
 
 // These are intentionally preserved from the user's original OpenClash custom rules.
 // Sub-Store should generate a separate company-only config, not modify daily custom rules.
-const RULE_TEXT = String.raw\`
+const RULE_TEXT = String.raw`
 # Original explicit direct exceptions, do not route these through company
 DOMAIN-SUFFIX,argotunnel.com,DIRECT
 DOMAIN-SUFFIX,cftunnel.com,DIRECT
@@ -197,7 +197,7 @@ GEOIP,CN,DIRECT
 
 # Emergency fallback
 MATCH,company
-\`;
+`;
 
 function main(config) {
     if (!config || !Array.isArray(config.proxies)) {
